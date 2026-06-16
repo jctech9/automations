@@ -137,26 +137,20 @@ def main():
             f"máxima={max_prob}%"
         )
 
-        # Envia TODA VEZ que rodar e estiver acima de 5%
-        if max_prob > LIMIAR_ALERTA:
-            mensagem = (
-                "⚠️ *Alerta de Chuva!*\n"
-                f"Probabilidade máxima nas próximas 2 horas: *{max_prob}%*.\n\n"
-                f"Agora: {dados['agora']}%\n"
-                f"Próxima hora: {dados['prox_1h']}%\n"
-                f"Daqui a 2 horas: {dados['prox_2h']}%\n\n"
-                "Local: Várzea da Onça, Quixadá-CE."
-            )
-
-            if enviar_telegram(mensagem):
-                logger.info(f"Alerta enviado. Probabilidade máxima: {max_prob}%")
-            else:
-                logger.error("Alerta detectado, mas o envio pelo Telegram falhou.")
-
+        # Envia alerta a cada execução
+        mensagem = (
+            "⚠️ *Alerta de Chuva!*\n"
+            f"Probabilidade máxima nas próximas 2 horas: *{max_prob}%*\.\n\n"
+            f"Agora: {dados['agora']}%\n"
+            f"Próxima hora: {dados['prox_1h']}%\n"
+            f"Daqui a 2 horas: {dados['prox_2h']}%\n\n"
+            "Local: Várzea da Onça, Quixadá-CE."
+        )
+        if enviar_telegram(mensagem):
+            logger.info(f"Alerta enviado. Probabilidade máxima: {max_prob}%")
         else:
-            logger.info(
-                f"Sem alerta. Probabilidade máxima {max_prob}% não está acima de {LIMIAR_ALERTA}%."
-            )
+            logger.error("Falha ao enviar alerta via Telegram.")
+
 
     except Exception as erro:
         logger.error(f"Falha na automação: {erro}")
