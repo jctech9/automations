@@ -2,8 +2,10 @@ name: Alerta de Chuva Automático
 
 on:
   workflow_dispatch:
+
   schedule:
-    - cron: "*/5 * * * *"  # Executa a cada 5 minutos (para testes)
+    - cron: "*/5 * * * *"
+      timezone: "America/Sao_Paulo"
 
 jobs:
   alerta-chuva:
@@ -11,16 +13,15 @@ jobs:
 
     steps:
       - name: Baixar código
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Configurar Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
       - name: Instalar dependências
         run: |
-          pip install requests
           pip install -r requirements.txt
 
       - name: Executar Alerta de Chuva
