@@ -19,7 +19,7 @@ LATITUDE = "-4.9684"
 LONGITUDE = "-39.0154"
 
 # Envia alerta se a probabilidade for ACIMA de 5%
-LIMIAR_ALERTA = 5
+LIMIAR_ALERTA = 0
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE = os.path.join(BASE_DIR, "clima_telegram.log")
