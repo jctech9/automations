@@ -18,8 +18,8 @@ CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 LATITUDE = "-4.9684"
 LONGITUDE = "-39.0154"
 
-# Envia alerta se a probabilidade for ACIMA de 5%
-LIMIAR_ALERTA = 0
+# Envia alerta se a probabilidade for maior ou igual a 50%
+LIMIAR_ALERTA = 50
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE = os.path.join(BASE_DIR, "clima_telegram.log")
@@ -137,7 +137,14 @@ def main():
             f"máxima={max_prob}%"
         )
 
-        # Envia alerta a cada execução
+        # Ignora quando a probabilidade estiver abaixo do limiar
+        if max_prob < LIMIAR_ALERTA:
+            logger.info(
+                f"Nenhum alerta enviado. Probabilidade maxima {max_prob}% "
+                f"abaixo do limiar de {LIMIAR_ALERTA}%."
+            )
+            return
+
         mensagem = (
             "⚠️ *Alerta de Chuva!*\n"
             f"Probabilidade máxima nas próximas 2 horas: *{max_prob}%*\.\n\n"
