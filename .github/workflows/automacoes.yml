@@ -1,11 +1,38 @@
-name: Teste Telegram
+name: Automações Climáticas
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "0 * * * *"  # Executa a cada hora
 
 jobs:
-  teste:
+  alerta-chuva:
     runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependências
+        run: |
+          pip install requests
+          pip install -r requirements.txt
+
+      - name: Executar Alerta de Chuva
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python scripts/alert_rain_vzo.py
+
+  teste-telegram:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Baixar código
