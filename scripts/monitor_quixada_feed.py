@@ -8,14 +8,18 @@ import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from html import unescape
 from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
+import urllib3
+from urllib3.exceptions import InsecureRequestWarning
 
 
 FEED_URL = os.environ.get("QUIXADA_FEED_URL", "https://www.quixada.ufc.br/feed/")
 STATE_FILE = Path(os.environ.get("QUIXADA_FEED_STATE_FILE", "data/quixada_feed_state.json"))
 MAX_STORED_ITEMS = int(os.environ.get("QUIXADA_FEED_MAX_STORED_ITEMS", "40"))
 MAX_ITEMS_IN_MESSAGE = int(os.environ.get("QUIXADA_FEED_MAX_ITEMS_IN_MESSAGE", "6"))
+SSL_FALLBACK_HOSTS = {"www.quixada.ufc.br"}
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", os.environ.get("TELEGRAM_TOKEN"))
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
@@ -88,11 +92,23 @@ def entry_hash(entry):
 
 def fetch_feed():
     logger.info(f"Consultando feed: {FEED_URL}")
-    response = requests.get(
-        FEED_URL,
-        headers={"User-Agent": "Mozilla/5.0 (feed monitor)"},
-        timeout=20,
-    )
+
+    headers = {"User-Agent": "Mozilla/5.0 (feed monitor)"}
+    try:
+        response = requests.get(FEED_URL, headers=headers, timeout=20)
+    except requests.exceptions.SSLError:
+        host = urlparse(FEED_URL).hostname
+        if host not in SSL_FALLBACK_HOSTS:
+            raise
+
+        logger.warning(
+            "Falha na validacao SSL do feed %s. Tentando novamente sem "
+            "validacao de certificado para esse host conhecido.",
+            host,
+        )
+        urllib3.disable_warnings(InsecureRequestWarning)
+        response = requests.get(FEED_URL, headers=headers, timeout=20, verify=False)
+
     response.raise_for_status()
     return response.content
 
