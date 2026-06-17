@@ -1,0 +1,54 @@
+name: quixada_feed_monitor
+
+on:
+  workflow_dispatch:
+
+  schedule:
+    - cron: "13 * * * *"
+      timezone: "America/Sao_Paulo"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: quixada-feed-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor-feed:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Configurar Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: |
+          pip install -r requirements.txt
+
+      - name: Executar monitor do feed
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python scripts/monitor_quixada_feed.py
+
+      - name: Salvar estado do monitor
+        run: |
+          if [ -z "$(git status --porcelain -- data/quixada_feed_state.json)" ]; then
+            echo "Sem alteracoes no estado do monitor."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/quixada_feed_state.json
+          git commit -m "Atualiza estado do monitor UFC Quixada"
+          git push
