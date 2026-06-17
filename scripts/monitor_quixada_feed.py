@@ -34,6 +34,15 @@ def now_utc():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def set_github_output(name, value):
+    output_path = os.environ.get("GITHUB_OUTPUT")
+    if not output_path:
+        return
+
+    with open(output_path, "a", encoding="utf-8") as file:
+        file.write(f"{name}={value}\n")
+
+
 def clean_text(value):
     if not value:
         return ""
@@ -306,11 +315,14 @@ def send_telegram(message):
 
 
 def main():
+    set_github_output("state_updated", "false")
+
     feed = parse_feed(fetch_feed())
     previous_state = load_state()
 
     if previous_state is None:
         save_state(feed)
+        set_github_output("state_updated", "true")
         logger.info(
             "Estado inicial criado com %s itens. Nenhuma notificacao enviada.",
             len(feed["entries"]),
@@ -327,6 +339,7 @@ def main():
         return 1
 
     save_state(feed)
+    set_github_output("state_updated", "true")
     logger.info(
         "Estado atualizado: %s novos itens, %s itens alterados.",
         len(new_entries),

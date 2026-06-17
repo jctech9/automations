@@ -8,7 +8,7 @@ on:
       timezone: "America/Sao_Paulo"
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: quixada-feed-monitor
@@ -21,8 +21,6 @@ jobs:
     steps:
       - name: Baixar codigo
         uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
 
       - name: Configurar Python
         uses: actions/setup-python@v6
@@ -33,22 +31,27 @@ jobs:
         run: |
           pip install -r requirements.txt
 
+      - name: Restaurar estado do monitor
+        id: restore-feed-state
+        uses: actions/cache/restore@v4
+        with:
+          path: .cache/quixada_feed_state.json
+          key: quixada-feed-state-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            quixada-feed-state-
+
       - name: Executar monitor do feed
+        id: monitor-feed
         env:
+          QUIXADA_FEED_STATE_FILE: .cache/quixada_feed_state.json
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           python scripts/monitor_quixada_feed.py
 
       - name: Salvar estado do monitor
-        run: |
-          if [ -z "$(git status --porcelain -- data/quixada_feed_state.json)" ]; then
-            echo "Sem alteracoes no estado do monitor."
-            exit 0
-          fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/quixada_feed_state.json
-          git commit -m "Atualiza estado do monitor UFC Quixada"
-          git push
+        if: success() && steps.monitor-feed.outputs.state_updated == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .cache/quixada_feed_state.json
+          key: quixada-feed-state-${{ github.run_id }}-${{ github.run_attempt }}
