@@ -1,4 +1,4 @@
-name: Alerta de Chuva Automático
+name: rain_alert_vzo
 
 on:
   workflow_dispatch:
