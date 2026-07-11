@@ -17,6 +17,7 @@ concurrency:
 jobs:
   monitor-feed:
     runs-on: ubuntu-latest
+    timeout-minutes: 8
 
     steps:
       - name: Baixar codigo
@@ -29,15 +30,17 @@ jobs:
 
       - name: Instalar dependencias
         run: |
-          pip install -r requirements.txt
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
 
       - name: Restaurar estado do monitor
         id: restore-feed-state
         uses: actions/cache/restore@v4
         with:
           path: .cache/quixada_feed_state.json
-          key: quixada-feed-state-${{ github.run_id }}-${{ github.run_attempt }}
+          key: quixada-feed-state-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: |
+            quixada-feed-state-${{ github.ref_name }}-
             quixada-feed-state-
 
       - name: Executar monitor do feed
@@ -54,4 +57,4 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .cache/quixada_feed_state.json
-          key: quixada-feed-state-${{ github.run_id }}-${{ github.run_attempt }}
+          key: quixada-feed-state-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}

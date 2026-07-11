@@ -7,9 +7,17 @@ on:
     - cron: "7 */2 * * *"
       timezone: "America/Sao_Paulo"
 
+permissions:
+  contents: read
+
+concurrency:
+  group: rain-alert-vzo
+  cancel-in-progress: false
+
 jobs:
   alerta-chuva:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
 
     steps:
       - name: Baixar código
@@ -22,7 +30,8 @@ jobs:
 
       - name: Instalar dependências
         run: |
-          pip install -r requirements.txt
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
 
       - name: Executar Alerta de Chuva
         env:

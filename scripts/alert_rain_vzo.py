@@ -1,10 +1,11 @@
-import urllib.request
-import urllib.parse
-import json
 import logging
 from logging.handlers import RotatingFileHandler
-import gc
 import os
+import sys
+
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # ==========================================
 # CONFIGURAÇÕES
@@ -15,14 +16,20 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", os.environ.get("TELEGRAM_T
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 # Coordenadas para Várzea da Onça, Quixadá-CE
-LATITUDE = "-4.9684"
-LONGITUDE = "-39.0154"
+LATITUDE = os.environ.get("RAIN_ALERT_LATITUDE", "-4.9684")
+LONGITUDE = os.environ.get("RAIN_ALERT_LONGITUDE", "-39.0154")
 
 # Envia alerta se a probabilidade for maior ou igual a 50%
-LIMIAR_ALERTA = 50
+LIMIAR_ALERTA = int(os.environ.get("RAIN_ALERT_THRESHOLD", "50"))
+HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT_SECONDS", "10"))
+HTTP_RETRIES = int(os.environ.get("HTTP_RETRIES", "3"))
+HTTP_BACKOFF_FACTOR = float(os.environ.get("HTTP_BACKOFF_FACTOR", "0.5"))
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LOG_FILE = os.path.join(BASE_DIR, "clima_telegram.log")
+LOG_FILE = os.environ.get(
+    "RAIN_ALERT_LOG_FILE",
+    os.path.join(BASE_DIR, "clima_telegram.log"),
+)
 
 # ==========================================
 # LOG
@@ -50,32 +57,44 @@ if not logger.handlers:
     logger.addHandler(console_handler)
 
 
-def enviar_telegram(mensagem):
+def criar_sessao_http():
+    retry = Retry(
+        total=HTTP_RETRIES,
+        connect=HTTP_RETRIES,
+        read=HTTP_RETRIES,
+        status=HTTP_RETRIES,
+        backoff_factor=HTTP_BACKOFF_FACTOR,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=frozenset({"GET", "POST"}),
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session = requests.Session()
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+
+def enviar_telegram(mensagem, session=None):
     if not TELEGRAM_TOKEN or not CHAT_ID:
         logger.error("TELEGRAM_TOKEN ou TELEGRAM_CHAT_ID não configurado.")
         return False
 
+    session = session or criar_sessao_http()
     url_telegram = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
 
-    payload = urllib.parse.urlencode({
-        "chat_id": CHAT_ID,
-        "text": mensagem,
-        "parse_mode": "Markdown"
-    }).encode("utf-8")
-
     try:
-        req = urllib.request.Request(
+        response = session.post(
             url_telegram,
-            data=payload,
-            method="POST"
+            data={
+                "chat_id": CHAT_ID,
+                "text": mensagem,
+            },
+            timeout=HTTP_TIMEOUT,
         )
-
-        with urllib.request.urlopen(req, timeout=10) as response:
-            resposta = response.read().decode("utf-8", errors="ignore")
-
-            if response.status != 200:
-                logger.error(f"Telegram retornou HTTP {response.status}: {resposta}")
-                return False
+        if response.status_code != 200:
+            logger.error("Telegram retornou HTTP %s: %s", response.status_code, response.text)
+            return False
 
         logger.info("Mensagem enviada para o Telegram.")
         return True
@@ -85,23 +104,26 @@ def enviar_telegram(mensagem):
         return False
 
 
-def consultar_chuva():
-    url_weather = (
-        "https://api.open-meteo.com/v1/forecast"
-        f"?latitude={LATITUDE}"
-        f"&longitude={LONGITUDE}"
-        "&hourly=precipitation_probability"
-        "&timezone=America%2FFortaleza"
-        "&forecast_hours=3"
+def consultar_chuva(session=None):
+    session = session or criar_sessao_http()
+    response = session.get(
+        "https://api.open-meteo.com/v1/forecast",
+        params={
+            "latitude": LATITUDE,
+            "longitude": LONGITUDE,
+            "hourly": "precipitation_probability",
+            "timezone": "America/Fortaleza",
+            "forecast_hours": 3,
+        },
+        headers={"User-Agent": "Mozilla/5.0"},
+        timeout=HTTP_TIMEOUT,
     )
+    response.raise_for_status()
 
-    req = urllib.request.Request(
-        url_weather,
-        headers={"User-Agent": "Mozilla/5.0"}
-    )
-
-    with urllib.request.urlopen(req, timeout=10) as response:
-        data = json.loads(response.read().decode("utf-8"))
+    try:
+        data = response.json()
+    except ValueError as erro:
+        raise RuntimeError("API retornou JSON inválido.") from erro
 
     probabilidades = data.get("hourly", {}).get("precipitation_probability", [])
     horarios = data.get("hourly", {}).get("time", [])
@@ -113,7 +135,10 @@ def consultar_chuva():
     prox_1h = probabilidades[1]
     prox_2h = probabilidades[2]
 
-    max_prob = max(prox_1h, prox_2h)
+    if any(valor is None for valor in (agora, prox_1h, prox_2h)):
+        raise RuntimeError(f"API retornou probabilidade vazia: {probabilidades[:3]}")
+
+    max_prob = max(agora, prox_1h, prox_2h)
 
     return {
         "agora": agora,
@@ -125,8 +150,10 @@ def consultar_chuva():
 
 
 def main():
+    session = criar_sessao_http()
+
     try:
-        dados = consultar_chuva()
+        dados = consultar_chuva(session)
 
         max_prob = dados["max_prob"]
 
@@ -143,28 +170,27 @@ def main():
                 f"Nenhum alerta enviado. Probabilidade maxima {max_prob}% "
                 f"abaixo do limiar de {LIMIAR_ALERTA}%."
             )
-            return
+            return 0
 
         mensagem = (
-            "⚠️ *Alerta de Chuva!*\n"
-            f"Probabilidade máxima nas próximas 2 horas: *{max_prob}%*\.\n\n"
+            "⚠️ Alerta de Chuva!\n"
+            f"Probabilidade máxima nas próximas 2 horas: {max_prob}%.\n\n"
             f"Agora: {dados['agora']}%\n"
             f"Próxima hora: {dados['prox_1h']}%\n"
             f"Daqui a 2 horas: {dados['prox_2h']}%\n\n"
             "Local: Várzea da Onça, Quixadá-CE."
         )
-        if enviar_telegram(mensagem):
+        if enviar_telegram(mensagem, session):
             logger.info(f"Alerta enviado. Probabilidade máxima: {max_prob}%")
-        else:
-            logger.error("Falha ao enviar alerta via Telegram.")
+            return 0
 
+        logger.error("Falha ao enviar alerta via Telegram.")
+        return 1
 
     except Exception as erro:
-        logger.error(f"Falha na automação: {erro}")
-
-    finally:
-        gc.collect()
+        logger.exception("Falha na automação: %s", erro)
+        return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

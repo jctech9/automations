@@ -12,13 +12,20 @@ from urllib.parse import urlparse
 
 import requests
 import urllib3
+from requests.adapters import HTTPAdapter
 from urllib3.exceptions import InsecureRequestWarning
+from urllib3.util.retry import Retry
 
 
 FEED_URL = os.environ.get("QUIXADA_FEED_URL", "https://www.quixada.ufc.br/feed/")
 STATE_FILE = Path(os.environ.get("QUIXADA_FEED_STATE_FILE", "data/quixada_feed_state.json"))
 MAX_STORED_ITEMS = int(os.environ.get("QUIXADA_FEED_MAX_STORED_ITEMS", "40"))
 MAX_ITEMS_IN_MESSAGE = int(os.environ.get("QUIXADA_FEED_MAX_ITEMS_IN_MESSAGE", "6"))
+HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT_SECONDS", "20"))
+TELEGRAM_TIMEOUT = int(os.environ.get("TELEGRAM_TIMEOUT_SECONDS", "10"))
+HTTP_RETRIES = int(os.environ.get("HTTP_RETRIES", "3"))
+HTTP_BACKOFF_FACTOR = float(os.environ.get("HTTP_BACKOFF_FACTOR", "0.5"))
+# Exceção controlada para o feed conhecido que historicamente falhou na cadeia SSL.
 SSL_FALLBACK_HOSTS = {"www.quixada.ufc.br"}
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", os.environ.get("TELEGRAM_TOKEN"))
@@ -54,7 +61,8 @@ def clean_text(value):
     text = re.sub(r"(?is)<(script|style).*?</\1>", " ", value)
     text = re.sub(r"(?s)<[^>]+>", " ", text)
     text = unescape(text)
-    return re.sub(r"\s+", " ", text).strip()
+    text = re.sub(r"\s+", " ", text).strip()
+    return re.sub(r"\s+([.,;:!?])", r"\1", text)
 
 
 def shorten(value, limit=260):
@@ -90,12 +98,31 @@ def entry_hash(entry):
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
-def fetch_feed():
+def build_http_session():
+    retry = Retry(
+        total=HTTP_RETRIES,
+        connect=HTTP_RETRIES,
+        read=HTTP_RETRIES,
+        status=HTTP_RETRIES,
+        backoff_factor=HTTP_BACKOFF_FACTOR,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=frozenset({"GET", "POST"}),
+        raise_on_status=False,
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session = requests.Session()
+    session.mount("https://", adapter)
+    session.mount("http://", adapter)
+    return session
+
+
+def fetch_feed(session=None):
     logger.info(f"Consultando feed: {FEED_URL}")
 
+    session = session or build_http_session()
     headers = {"User-Agent": "Mozilla/5.0 (feed monitor)"}
     try:
-        response = requests.get(FEED_URL, headers=headers, timeout=20)
+        response = session.get(FEED_URL, headers=headers, timeout=HTTP_TIMEOUT)
     except requests.exceptions.SSLError:
         host = urlparse(FEED_URL).hostname
         if host not in SSL_FALLBACK_HOSTS:
@@ -103,11 +130,17 @@ def fetch_feed():
 
         logger.warning(
             "Falha na validacao SSL do feed %s. Tentando novamente sem "
-            "validacao de certificado para esse host conhecido.",
+            "validacao de certificado para esse host conhecido. Revise esta "
+            "excecao quando o certificado do site for corrigido.",
             host,
         )
         urllib3.disable_warnings(InsecureRequestWarning)
-        response = requests.get(FEED_URL, headers=headers, timeout=20, verify=False)
+        response = session.get(
+            FEED_URL,
+            headers=headers,
+            timeout=HTTP_TIMEOUT,
+            verify=False,
+        )
 
     response.raise_for_status()
     return response.content
@@ -306,21 +339,22 @@ def split_message(message, limit=3900):
     return chunks
 
 
-def send_telegram(message):
+def send_telegram(message, session=None):
     if not TELEGRAM_TOKEN or not CHAT_ID:
         logger.error("TELEGRAM_TOKEN ou TELEGRAM_CHAT_ID nao configurado.")
         return False
 
+    session = session or build_http_session()
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     for chunk in split_message(message):
-        response = requests.post(
+        response = session.post(
             url,
             data={
                 "chat_id": CHAT_ID,
                 "text": chunk,
                 "disable_web_page_preview": False,
             },
-            timeout=10,
+            timeout=TELEGRAM_TIMEOUT,
         )
         if response.status_code != 200:
             logger.error(f"Telegram retornou HTTP {response.status_code}: {response.text}")
@@ -333,7 +367,8 @@ def send_telegram(message):
 def main():
     set_github_output("state_updated", "false")
 
-    feed = parse_feed(fetch_feed())
+    session = build_http_session()
+    feed = parse_feed(fetch_feed(session))
     previous_state = load_state()
 
     if previous_state is None:
@@ -351,7 +386,7 @@ def main():
         return 0
 
     message = build_message(new_entries, changed_entries)
-    if not send_telegram(message):
+    if not send_telegram(message, session):
         return 1
 
     save_state(feed)
