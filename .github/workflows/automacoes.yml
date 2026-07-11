@@ -1,7 +1,16 @@
-name: rain_alert_vzo
+name: rain_alerts
 
 on:
+  # Gatilho temporário para validar os dois envios no próximo push.
+  push:
+
   workflow_dispatch:
+    inputs:
+      test_message:
+        description: Enviar mensagem de teste sem consultar a previsão
+        required: false
+        default: false
+        type: boolean
 
   schedule:
     - cron: "7 */2 * * *"
@@ -11,11 +20,11 @@ permissions:
   contents: read
 
 concurrency:
-  group: rain-alert-vzo
+  group: rain-alerts
   cancel-in-progress: false
 
 jobs:
-  alerta-chuva:
+  alerta-varzea-da-onca:
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -33,9 +42,44 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      - name: Executar Alerta de Chuva
+      - name: Executar alerta de Várzea da Onça
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RAIN_ALERT_LOCATION_NAME: Várzea da Onça, Quixadá-CE
+          RAIN_ALERT_LATITUDE: "-4.94094"
+          RAIN_ALERT_LONGITUDE: "-38.85624"
+          RAIN_ALERT_LOG_FILE: varzea-da-onca.log
+          RAIN_ALERT_TEST_MODE: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.test_message) }}
         run: |
-          python scripts/alert_rain_vzo.py
+          python scripts/alert_rain.py
+
+  alerta-quixada-sede:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v5
+
+      - name: Configurar Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Executar alerta de Quixadá sede
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          RAIN_ALERT_LOCATION_NAME: Quixadá sede, CE
+          RAIN_ALERT_LATITUDE: "-4.96"
+          RAIN_ALERT_LONGITUDE: "-39.01"
+          RAIN_ALERT_LOG_FILE: quixada-sede.log
+          RAIN_ALERT_TEST_MODE: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.test_message) }}
+        run: |
+          python scripts/alert_rain.py

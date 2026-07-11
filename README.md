@@ -2,7 +2,7 @@
 
 Automacoes em Python executadas pelo GitHub Actions para:
 
-- enviar alerta de chuva para Varzea da Onca, Quixada-CE;
+- enviar alertas de chuva separados para Varzea da Onca e Quixada sede;
 - monitorar o feed RSS/Atom do campus UFC Quixada e notificar novas publicacoes ou alteracoes.
 
 ## Secrets
@@ -14,7 +14,7 @@ Configure estes secrets no repositorio:
 
 ## Workflows
 
-- `rain_alert_vzo`: roda a cada 2 horas, no minuto 7.
+- `rain_alerts`: roda dois jobs a cada 2 horas, no minuto 7: um para Varzea da Onca e outro para Quixada sede. A execucao manual permite enviar mensagens de teste.
 - `quixada_feed_monitor`: roda a cada hora, no minuto 13.
 - `tests`: roda em push, pull request e manualmente.
 
@@ -24,9 +24,11 @@ Os workflows usam `timezone: America/Sao_Paulo`, permissoes minimas de leitura e
 
 ### Alerta de chuva
 
+- `RAIN_ALERT_LOCATION_NAME`: nome exibido na mensagem.
 - `RAIN_ALERT_LATITUDE` e `RAIN_ALERT_LONGITUDE`: coordenadas monitoradas.
 - `RAIN_ALERT_THRESHOLD`: limiar minimo de probabilidade para enviar alerta. Padrao: `50`.
 - `RAIN_ALERT_LOG_FILE`: caminho opcional do arquivo de log.
+- `RAIN_ALERT_TEST_MODE`: quando `true`, envia uma mensagem de teste sem consultar a previsao.
 
 ### Monitor do feed
 
@@ -67,6 +69,6 @@ python -m pytest
 Execute uma automacao:
 
 ```bash
-python scripts/alert_rain_vzo.py
+python scripts/alert_rain.py
 python scripts/monitor_quixada_feed.py
 ```

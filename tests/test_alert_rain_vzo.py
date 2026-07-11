@@ -1,4 +1,4 @@
-import scripts.alert_rain_vzo as alert
+import scripts.alert_rain as alert
 
 
 class FakeResponse:
@@ -81,3 +81,43 @@ def test_main_nao_envia_alerta_abaixo_do_limiar(monkeypatch):
     )
 
     assert alert.main() == 0
+
+
+def test_mensagem_alerta_identifica_local(monkeypatch):
+    monkeypatch.setattr(alert, "NOME_LOCAL", "Quixadá sede, CE")
+
+    mensagem = alert.criar_mensagem_alerta(
+        {
+            "agora": 20,
+            "prox_1h": 60,
+            "prox_2h": 40,
+            "max_prob": 60,
+        }
+    )
+
+    assert "Local: Quixadá sede, CE." in mensagem
+    assert "Probabilidade máxima nas próximas 2 horas: 60%." in mensagem
+
+
+def test_modo_teste_envia_sem_consultar_previsao(monkeypatch):
+    mensagens = []
+    monkeypatch.setattr(alert, "MODO_TESTE", True)
+    monkeypatch.setattr(alert, "NOME_LOCAL", "Várzea da Onça, Quixadá-CE")
+    monkeypatch.setattr(alert, "criar_sessao_http", lambda: object())
+    monkeypatch.setattr(
+        alert,
+        "consultar_chuva",
+        lambda session=None: (_ for _ in ()).throw(
+            AssertionError("não deveria consultar a previsão")
+        ),
+    )
+    monkeypatch.setattr(
+        alert,
+        "enviar_telegram",
+        lambda mensagem, session=None: mensagens.append(mensagem) or True,
+    )
+
+    assert alert.main() == 0
+    assert "Teste do alerta de chuva concluído" in mensagens[0]
+    assert "Várzea da Onça" in mensagens[0]
+    assert "não indica previsão de chuva" in mensagens[0]
