@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import re
+import ssl
 import sys
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -11,9 +12,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import requests
-import urllib3
 from requests.adapters import HTTPAdapter
-from urllib3.exceptions import InsecureRequestWarning
 from urllib3.util.retry import Retry
 
 
@@ -25,9 +24,12 @@ HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT_SECONDS", "20"))
 TELEGRAM_TIMEOUT = int(os.environ.get("TELEGRAM_TIMEOUT_SECONDS", "10"))
 HTTP_RETRIES = int(os.environ.get("HTTP_RETRIES", "3"))
 HTTP_BACKOFF_FACTOR = float(os.environ.get("HTTP_BACKOFF_FACTOR", "0.5"))
-# Exceção controlada para o feed conhecido que historicamente falhou na cadeia SSL.
-SSL_FALLBACK_HOSTS = {"www.quixada.ufc.br"}
-
+QUIXADA_TLS_HOST = "www.quixada.ufc.br"
+QUIXADA_CA_BUNDLE = (
+    Path(__file__).resolve().parent.parent
+    / "certs"
+    / "quixada-globalsign-chain.pem"
+)
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", os.environ.get("TELEGRAM_TOKEN"))
 CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
@@ -39,6 +41,25 @@ NAMESPACES = {
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger("QuixadaFeedMonitor")
+
+
+class SSLContextAdapter(HTTPAdapter):
+    def __init__(self, ssl_context, *args, **kwargs):
+        self.ssl_context = ssl_context
+        super().__init__(*args, **kwargs)
+
+    def init_poolmanager(self, connections, maxsize, block=False, **pool_kwargs):
+        pool_kwargs["ssl_context"] = self.ssl_context
+        return super().init_poolmanager(
+            connections,
+            maxsize,
+            block=block,
+            **pool_kwargs,
+        )
+
+    def proxy_manager_for(self, proxy, **proxy_kwargs):
+        proxy_kwargs["ssl_context"] = self.ssl_context
+        return super().proxy_manager_for(proxy, **proxy_kwargs)
 
 
 def now_utc():
@@ -109,10 +130,17 @@ def build_http_session():
         allowed_methods=frozenset({"GET", "POST"}),
         raise_on_status=False,
     )
-    adapter = HTTPAdapter(max_retries=retry)
     session = requests.Session()
-    session.mount("https://", adapter)
-    session.mount("http://", adapter)
+    session.mount("https://", HTTPAdapter(max_retries=retry))
+    session.mount("http://", HTTPAdapter(max_retries=retry))
+
+    # Compatibilidade temporaria para a cadeia incompleta entregue pelo servidor.
+    # A verificacao TLS continua obrigatoria. Revisar ate 2026-10-15.
+    quixada_context = ssl.create_default_context(cafile=str(QUIXADA_CA_BUNDLE))
+    session.mount(
+        f"https://{QUIXADA_TLS_HOST}/",
+        SSLContextAdapter(quixada_context, max_retries=retry),
+    )
     return session
 
 
@@ -121,27 +149,13 @@ def fetch_feed(session=None):
 
     session = session or build_http_session()
     headers = {"User-Agent": "Mozilla/5.0 (feed monitor)"}
-    try:
-        response = session.get(FEED_URL, headers=headers, timeout=HTTP_TIMEOUT)
-    except requests.exceptions.SSLError:
-        host = urlparse(FEED_URL).hostname
-        if host not in SSL_FALLBACK_HOSTS:
-            raise
-
+    if urlparse(FEED_URL).hostname == QUIXADA_TLS_HOST:
         logger.warning(
-            "Falha na validacao SSL do feed %s. Tentando novamente sem "
-            "validacao de certificado para esse host conhecido. Revise esta "
-            "excecao quando o certificado do site for corrigido.",
-            host,
+            "Compatibilidade TLS temporaria ativa para %s com cadeia CA "
+            "especifica e verificacao obrigatoria. Revisar ate 2026-10-15.",
+            QUIXADA_TLS_HOST,
         )
-        urllib3.disable_warnings(InsecureRequestWarning)
-        response = session.get(
-            FEED_URL,
-            headers=headers,
-            timeout=HTTP_TIMEOUT,
-            verify=False,
-        )
-
+    response = session.get(FEED_URL, headers=headers, timeout=HTTP_TIMEOUT)
     response.raise_for_status()
     return response.content
 

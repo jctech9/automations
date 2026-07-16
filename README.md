@@ -48,9 +48,27 @@ Os workflows usam `timezone: America/Sao_Paulo`, permissoes minimas de leitura e
 
 O estado do feed e salvo via `actions/cache`. Isso reduz notificacoes duplicadas entre execucoes, mas cache nao e armazenamento permanente: pode expirar ou ser removido pelo GitHub. Se o historico ficar critico, mova o estado para um storage persistente, como uma branch dedicada, banco simples ou bucket.
 
-## SSL do feed UFC Quixada
+## TLS do feed UFC Quixada
 
-O monitor mantem uma excecao controlada para `www.quixada.ufc.br`: se a validacao SSL falhar, ele tenta novamente sem validar certificado apenas para esse host conhecido. Revise e remova essa excecao quando a cadeia de certificados do site estiver corrigida.
+Todas as requisicoes HTTPS do monitor exigem validacao do certificado, inclusive
+durante redirecionamentos. Nao existe fallback com `verify=False` nem variavel de
+ambiente para desativar essa protecao.
+
+Em 16/07/2026, o certificado de `https://www.quixada.ufc.br/feed/` estava valido
+para `*.quixada.ufc.br`, de 10/10/2025 a 11/11/2026. Entretanto, o servidor
+entregava uma cadeia incorreta: omitia a intermediaria que assinou o certificado
+e enviava certificados de outra hierarquia. Clientes que completam a cadeia
+automaticamente conseguiam acessar o feed, mas OpenSSL/`requests` falhava com
+`unable to get local issuer certificate`.
+
+Como compatibilidade temporaria, somente o hostname exato `www.quixada.ufc.br`
+usa o bundle confiavel em `certs/quixada-globalsign-chain.pem`, contendo a
+intermediaria `GlobalSign RSA OV SSL CA 2018` e a raiz `GlobalSign Root R3`.
+Outros hosts, inclusive destinos de redirecionamento, continuam usando a cadeia
+padrao do `requests`. A verificacao TLS permanece ativa nos dois casos.
+
+Revisar esta compatibilidade ate **15/10/2026** e remover o bundle assim que o
+servidor passar a entregar a cadeia correta.
 
 ## Rodar localmente
 

@@ -1,3 +1,7 @@
+import pytest
+import requests
+from requests.adapters import HTTPAdapter
+
 import scripts.monitor_quixada_feed as monitor
 
 
@@ -16,6 +20,112 @@ RSS_SAMPLE = b"""<?xml version="1.0" encoding="UTF-8"?>
   </channel>
 </rss>
 """
+
+
+class FakeResponse:
+    def __init__(self, content=RSS_SAMPLE, url="https://www.quixada.ufc.br/feed/"):
+        self.content = content
+        self.url = url
+        self.history = []
+
+    def raise_for_status(self):
+        return None
+
+
+class FakeSession:
+    def __init__(self, response=None, error=None):
+        self.response = response or FakeResponse()
+        self.error = error
+        self.calls = []
+
+    def get(self, url, **kwargs):
+        self.calls.append((url, kwargs))
+        if self.error:
+            raise self.error
+        return self.response
+
+
+def assert_tls_verification_was_not_disabled(session):
+    assert len(session.calls) == 1
+    _, kwargs = session.calls[0]
+    assert kwargs.get("verify", True) is not False
+    assert kwargs["timeout"] == monitor.HTTP_TIMEOUT
+
+
+def test_fetch_feed_certificado_valido_mantem_verificacao_tls(
+    monkeypatch,
+    caplog,
+):
+    monkeypatch.setattr(
+        monitor,
+        "FEED_URL",
+        "https://www.quixada.ufc.br/feed/",
+    )
+    session = FakeSession()
+
+    assert monitor.fetch_feed(session) == RSS_SAMPLE
+    assert_tls_verification_was_not_disabled(session)
+    assert "Compatibilidade TLS temporaria ativa" in caplog.text
+    assert monitor.QUIXADA_TLS_HOST in caplog.text
+
+
+def test_fetch_feed_propaga_falha_ssl_sem_segunda_tentativa(monkeypatch):
+    monkeypatch.setattr(
+        monitor,
+        "FEED_URL",
+        "https://www.quixada.ufc.br/feed/",
+    )
+    session = FakeSession(error=requests.exceptions.SSLError("certificate verify failed"))
+
+    with pytest.raises(requests.exceptions.SSLError):
+        monitor.fetch_feed(session)
+
+    assert_tls_verification_was_not_disabled(session)
+
+
+def test_build_http_session_host_permitido_usa_ca_especifica():
+    session = monitor.build_http_session()
+    adapter = session.get_adapter("https://www.quixada.ufc.br/feed/")
+
+    assert isinstance(adapter, monitor.SSLContextAdapter)
+    assert adapter.ssl_context.check_hostname is True
+    assert adapter.ssl_context.verify_mode.name == "CERT_REQUIRED"
+    assert adapter.max_retries.total == monitor.HTTP_RETRIES
+
+
+def test_build_http_session_host_diferente_usa_validacao_padrao():
+    session = monitor.build_http_session()
+    adapter = session.get_adapter("https://feed.example.net/rss")
+
+    assert type(adapter) is HTTPAdapter
+    assert adapter.max_retries.total == monitor.HTTP_RETRIES
+
+
+def test_redirecionamento_para_outro_host_nao_herda_ca_especifica():
+    session = monitor.build_http_session()
+    source_adapter = session.get_adapter("https://www.quixada.ufc.br/feed/")
+    target_adapter = session.get_adapter("https://cdn.example.net/feed/")
+
+    assert isinstance(source_adapter, monitor.SSLContextAdapter)
+    assert type(target_adapter) is HTTPAdapter
+    assert target_adapter is not source_adapter
+
+
+def test_fetch_feed_fallback_inseguro_nao_pode_ser_ativado_por_ambiente(
+    monkeypatch,
+):
+    monkeypatch.setenv("QUIXADA_SSL_FALLBACK_ENABLED", "true")
+    monkeypatch.setattr(
+        monitor,
+        "FEED_URL",
+        "https://www.quixada.ufc.br/feed/",
+    )
+    session = FakeSession(error=requests.exceptions.SSLError("certificate verify failed"))
+
+    with pytest.raises(requests.exceptions.SSLError):
+        monitor.fetch_feed(session)
+
+    assert_tls_verification_was_not_disabled(session)
 
 
 def test_parse_feed_rss_limpa_html_e_gera_hash():
