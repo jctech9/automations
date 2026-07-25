@@ -43,6 +43,10 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s - %(message)s")
 logger = logging.getLogger("QuixadaFeedMonitor")
 
 
+class FeedContentError(RuntimeError):
+    """Indica que a resposta recebida nao contem um feed utilizavel."""
+
+
 class SSLContextAdapter(HTTPAdapter):
     def __init__(self, ssl_context, *args, **kwargs):
         self.ssl_context = ssl_context
@@ -220,10 +224,14 @@ def parse_atom_feed(root):
 
 
 def parse_feed(xml_content):
-    root = ET.fromstring(xml_content)
+    try:
+        root = ET.fromstring(xml_content)
+    except ET.ParseError as error:
+        raise FeedContentError("Resposta do feed nao e um XML valido.") from error
+
     feed = parse_rss_channel(root) or parse_atom_feed(root)
     if not feed or not feed["entries"]:
-        raise RuntimeError("Feed sem itens para monitorar.")
+        raise FeedContentError("Feed sem itens para monitorar.")
     return feed
 
 
@@ -380,9 +388,22 @@ def send_telegram(message, session=None):
 
 def main():
     set_github_output("state_updated", "false")
+    set_github_output("feed_available", "false")
 
     session = build_http_session()
-    feed = parse_feed(fetch_feed(session))
+    try:
+        feed = parse_feed(fetch_feed(session))
+    except (requests.exceptions.RequestException, FeedContentError) as error:
+        logger.warning(
+            "Feed indisponivel nesta verificacao (%s: %s). "
+            "O estado anterior foi preservado e uma nova tentativa sera feita "
+            "na proxima execucao.",
+            type(error).__name__,
+            error,
+        )
+        return 0
+
+    set_github_output("feed_available", "true")
     previous_state = load_state()
 
     if previous_state is None:

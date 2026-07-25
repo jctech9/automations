@@ -138,6 +138,14 @@ def test_parse_feed_rss_limpa_html_e_gera_hash():
     assert feed["entries"][0]["hash"]
 
 
+def test_parse_feed_resposta_invalida_gera_erro_de_conteudo():
+    with pytest.raises(
+        monitor.FeedContentError,
+        match="nao e um XML valido",
+    ):
+        monitor.parse_feed(b"<html>site em manutencao")
+
+
 def test_detect_changes_separa_novos_e_alterados():
     entry = monitor.parse_feed(RSS_SAMPLE)["entries"][0]
     previous_state = {"entries": {entry["id"]: entry}}
@@ -169,3 +177,63 @@ def test_split_message_respeita_limite_em_blocos():
         "b" * 20,
         "c" * 20,
     ]
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        requests.exceptions.Timeout("tempo esgotado"),
+        requests.exceptions.ConnectionError("site fora do ar"),
+        requests.exceptions.HTTPError("HTTP 503"),
+    ],
+)
+def test_main_indisponibilidade_do_site_nao_falha_execucao(
+    monkeypatch,
+    caplog,
+    error,
+):
+    monkeypatch.setattr(monitor, "build_http_session", lambda: object())
+    monkeypatch.setattr(
+        monitor,
+        "fetch_feed",
+        lambda session: (_ for _ in ()).throw(error),
+    )
+    monkeypatch.setattr(
+        monitor,
+        "load_state",
+        lambda: pytest.fail("Estado nao deveria ser lido."),
+    )
+    monkeypatch.setattr(
+        monitor,
+        "save_state",
+        lambda feed: pytest.fail("Estado nao deveria ser alterado."),
+    )
+
+    assert monitor.main() == 0
+    assert "Feed indisponivel nesta verificacao" in caplog.text
+    assert "estado anterior foi preservado" in caplog.text
+
+
+def test_main_resposta_temporaria_invalida_nao_falha_execucao(
+    monkeypatch,
+    caplog,
+):
+    monkeypatch.setattr(monitor, "build_http_session", lambda: object())
+    monkeypatch.setattr(
+        monitor,
+        "fetch_feed",
+        lambda session: b"<html>site em manutencao",
+    )
+    monkeypatch.setattr(
+        monitor,
+        "load_state",
+        lambda: pytest.fail("Estado nao deveria ser lido."),
+    )
+    monkeypatch.setattr(
+        monitor,
+        "save_state",
+        lambda feed: pytest.fail("Estado nao deveria ser alterado."),
+    )
+
+    assert monitor.main() == 0
+    assert "Feed indisponivel nesta verificacao" in caplog.text

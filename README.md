@@ -37,6 +37,11 @@ Os workflows usam `timezone: America/Sao_Paulo`, permissoes minimas de leitura e
 - `QUIXADA_FEED_MAX_STORED_ITEMS`: total de itens guardados no estado. Padrao: `40`.
 - `QUIXADA_FEED_MAX_ITEMS_IN_MESSAGE`: total maximo de itens por mensagem. Padrao: `6`.
 
+Se o site estiver temporariamente fora do ar, responder com erro HTTP ou retornar
+uma pagina de manutencao no lugar do feed, a execucao termina normalmente e
+preserva o ultimo estado valido. A proxima execucao agendada tenta novamente.
+Erros inesperados da automacao continuam fazendo o workflow falhar.
+
 ### HTTP
 
 - `HTTP_TIMEOUT_SECONDS`: timeout das chamadas HTTP.
