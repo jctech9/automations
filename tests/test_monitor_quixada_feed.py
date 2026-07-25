@@ -169,6 +169,32 @@ def test_detect_changes_separa_novos_e_alterados():
     assert changed_entries[0]["changed_fields"] == ["summary"]
 
 
+def test_build_message_formata_nova_publicacao_para_telegram():
+    entry = monitor.parse_feed(RSS_SAMPLE)["entries"][0]
+
+    message = monitor.build_message([entry], [])
+
+    assert message.startswith("📰 Nova publicação — UFC Quixadá")
+    assert "📌 Primeira noticia" in message
+    assert "🗓 Publicado em: 11/07/2026 às 11:00" in message
+    assert "📝 Resumo limpo." in message
+    assert "🔗 https://www.quixada.ufc.br/noticia" in message
+    assert "Feed:" not in message
+    assert "Verificado em:" not in message
+
+
+def test_build_message_diferencia_publicacao_atualizada():
+    entry = monitor.parse_feed(RSS_SAMPLE)["entries"][0]
+    entry["changed_fields"] = ["title", "summary"]
+
+    message = monitor.build_message([], [entry])
+
+    assert message.startswith("✏️ Publicação atualizada — UFC Quixadá")
+    assert "✏️ Alterado: título, resumo/conteúdo" in message
+    assert "📝 Resumo limpo." in message
+    assert "🔗 https://www.quixada.ufc.br/noticia" in message
+
+
 def test_split_message_respeita_limite_em_blocos():
     message = ("a" * 20) + "\n\n" + ("b" * 20) + "\n\n" + ("c" * 20)
 

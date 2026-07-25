@@ -19,7 +19,7 @@ Configure estes secrets no repositorio:
 - `quixada_feed_monitor`: roda a cada hora, no minuto 13. A execucao manual permite enviar uma mensagem de teste sem consultar o feed.
 - `tests`: roda em push, pull request e manualmente.
 
-Os workflows usam `timezone: America/Sao_Paulo`, permissoes minimas de leitura e `timeout-minutes` para evitar execucoes presas.
+Os workflows usam `timezone: America/Fortaleza`, permissoes minimas de leitura e `timeout-minutes` para evitar execucoes presas.
 
 ## Variaveis de ambiente
 

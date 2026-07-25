@@ -6,7 +6,8 @@ import re
 import ssl
 import sys
 import xml.etree.ElementTree as ET
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from html import unescape
 from pathlib import Path
 from urllib.parse import urlparse
@@ -29,6 +30,7 @@ HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT_SECONDS", "20"))
 TELEGRAM_TIMEOUT = int(os.environ.get("TELEGRAM_TIMEOUT_SECONDS", "10"))
 HTTP_RETRIES = int(os.environ.get("HTTP_RETRIES", "3"))
 HTTP_BACKOFF_FACTOR = float(os.environ.get("HTTP_BACKOFF_FACTOR", "0.5"))
+FORTALEZA_TIMEZONE = timezone(timedelta(hours=-3))
 QUIXADA_TLS_HOST = "www.quixada.ufc.br"
 QUIXADA_CA_BUNDLE = (
     Path(__file__).resolve().parent.parent
@@ -291,62 +293,94 @@ def detect_changes(previous_state, current_entries):
     return new_entries, changed_entries
 
 
+def format_publication_date(value):
+    if not value:
+        return ""
+
+    try:
+        publication_date = parsedate_to_datetime(value)
+    except (TypeError, ValueError, IndexError):
+        try:
+            publication_date = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return value
+
+    if publication_date.tzinfo is None:
+        publication_date = publication_date.replace(tzinfo=timezone.utc)
+
+    return publication_date.astimezone(FORTALEZA_TIMEZONE).strftime(
+        "%d/%m/%Y às %H:%M"
+    )
+
+
 def format_entry(entry):
-    lines = [f"- {entry.get('title') or '(sem titulo)'}"]
+    lines = [f"📌 {entry.get('title') or '(sem título)'}"]
     if entry.get("pub_date"):
-        lines.append(f"  Data: {entry['pub_date']}")
+        lines.append(
+            f"🗓 Publicado em: {format_publication_date(entry['pub_date'])}"
+        )
     if entry.get("creator"):
-        lines.append(f"  Autor: {entry['creator']}")
-    if entry.get("link"):
-        lines.append(f"  Link: {entry['link']}")
+        lines.append(f"👤 Autor: {entry['creator']}")
     if entry.get("summary"):
-        lines.append(f"  Resumo: {shorten(entry['summary'])}")
+        lines.extend(["", f"📝 {shorten(entry['summary'])}"])
+    if entry.get("link"):
+        lines.extend(["", f"🔗 {entry['link']}"])
     return "\n".join(lines)
 
 
 def format_changed_entry(entry):
     labels = {
-        "title": "titulo",
+        "title": "título",
         "link": "link",
         "pub_date": "data",
         "creator": "autor",
-        "summary": "resumo/conteudo",
+        "summary": "resumo/conteúdo",
     }
     fields = ", ".join(labels.get(field, field) for field in entry.get("changed_fields", []))
-    lines = [f"- {entry.get('title') or '(sem titulo)'}"]
+    lines = [f"📌 {entry.get('title') or '(sem título)'}"]
     if fields:
-        lines.append(f"  Campos alterados: {fields}")
-    if entry.get("link"):
-        lines.append(f"  Link: {entry['link']}")
+        lines.append(f"✏️ Alterado: {fields}")
     if entry.get("summary"):
-        lines.append(f"  Resumo atual: {shorten(entry['summary'])}")
+        lines.extend(["", f"📝 {shorten(entry['summary'])}"])
+    if entry.get("link"):
+        lines.extend(["", f"🔗 {entry['link']}"])
     return "\n".join(lines)
 
 
 def build_message(new_entries, changed_entries):
-    lines = [
-        "Atualizacao detectada no site UFC Quixada",
-        f"Feed: {FEED_URL}",
-        f"Verificado em: {now_utc()}",
-    ]
+    sections = []
 
     if new_entries:
-        lines.append("")
-        lines.append(f"Novas publicacoes ({len(new_entries)}):")
+        title = (
+            "📰 Nova publicação — UFC Quixadá"
+            if len(new_entries) == 1
+            else f"📰 {len(new_entries)} novas publicações — UFC Quixadá"
+        )
+        entries = [title]
         for entry in new_entries[:MAX_ITEMS_IN_MESSAGE]:
-            lines.append(format_entry(entry))
+            entries.append(format_entry(entry))
         if len(new_entries) > MAX_ITEMS_IN_MESSAGE:
-            lines.append(f"... e mais {len(new_entries) - MAX_ITEMS_IN_MESSAGE} publicacoes.")
+            entries.append(
+                f"… e mais {len(new_entries) - MAX_ITEMS_IN_MESSAGE} publicações."
+            )
+        sections.append("\n\n".join(entries))
 
     if changed_entries:
-        lines.append("")
-        lines.append(f"Itens alterados ({len(changed_entries)}):")
+        title = (
+            "✏️ Publicação atualizada — UFC Quixadá"
+            if len(changed_entries) == 1
+            else f"✏️ {len(changed_entries)} publicações atualizadas — UFC Quixadá"
+        )
+        entries = [title]
         for entry in changed_entries[:MAX_ITEMS_IN_MESSAGE]:
-            lines.append(format_changed_entry(entry))
+            entries.append(format_changed_entry(entry))
         if len(changed_entries) > MAX_ITEMS_IN_MESSAGE:
-            lines.append(f"... e mais {len(changed_entries) - MAX_ITEMS_IN_MESSAGE} itens.")
+            entries.append(
+                f"… e mais {len(changed_entries) - MAX_ITEMS_IN_MESSAGE} publicações."
+            )
+        sections.append("\n\n".join(entries))
 
-    return "\n\n".join(lines)
+    return "\n\n".join(sections)
 
 
 def split_message(message, limit=3900):
