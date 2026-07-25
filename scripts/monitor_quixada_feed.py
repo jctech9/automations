@@ -20,6 +20,11 @@ FEED_URL = os.environ.get("QUIXADA_FEED_URL", "https://www.quixada.ufc.br/feed/"
 STATE_FILE = Path(os.environ.get("QUIXADA_FEED_STATE_FILE", "data/quixada_feed_state.json"))
 MAX_STORED_ITEMS = int(os.environ.get("QUIXADA_FEED_MAX_STORED_ITEMS", "40"))
 MAX_ITEMS_IN_MESSAGE = int(os.environ.get("QUIXADA_FEED_MAX_ITEMS_IN_MESSAGE", "6"))
+TEST_MODE = os.environ.get("QUIXADA_FEED_TEST_MODE", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+}
 HTTP_TIMEOUT = int(os.environ.get("HTTP_TIMEOUT_SECONDS", "20"))
 TELEGRAM_TIMEOUT = int(os.environ.get("TELEGRAM_TIMEOUT_SECONDS", "10"))
 HTTP_RETRIES = int(os.environ.get("HTTP_RETRIES", "3"))
@@ -386,11 +391,23 @@ def send_telegram(message, session=None):
     return True
 
 
+def build_test_message():
+    return (
+        "✅ Teste do monitor do feed concluído.\n\n"
+        f"Feed monitorado: {FEED_URL}\n"
+        "Esta é uma mensagem de teste; não indica nova publicação."
+    )
+
+
 def main():
     set_github_output("state_updated", "false")
     set_github_output("feed_available", "false")
 
     session = build_http_session()
+    if TEST_MODE:
+        logger.info("Enviando mensagem de teste do monitor do feed.")
+        return 0 if send_telegram(build_test_message(), session) else 1
+
     try:
         feed = parse_feed(fetch_feed(session))
     except (requests.exceptions.RequestException, FeedContentError) as error:

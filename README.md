@@ -16,7 +16,7 @@ Configure estes secrets no repositorio:
 ## Workflows
 
 - `rain_alerts`: roda dois jobs a cada 3 horas, no minuto 7: um para Varzea da Onca e outro para Quixada sede. A execucao manual permite enviar mensagens de teste.
-- `quixada_feed_monitor`: roda a cada hora, no minuto 13.
+- `quixada_feed_monitor`: roda a cada hora, no minuto 13. A execucao manual permite enviar uma mensagem de teste sem consultar o feed.
 - `tests`: roda em push, pull request e manualmente.
 
 Os workflows usam `timezone: America/Sao_Paulo`, permissoes minimas de leitura e `timeout-minutes` para evitar execucoes presas.
@@ -37,6 +37,7 @@ Os workflows usam `timezone: America/Sao_Paulo`, permissoes minimas de leitura e
 - `QUIXADA_FEED_STATE_FILE`: arquivo usado para comparar execucoes. No Actions, fica em `.cache/quixada_feed_state.json`.
 - `QUIXADA_FEED_MAX_STORED_ITEMS`: total de itens guardados no estado. Padrao: `40`.
 - `QUIXADA_FEED_MAX_ITEMS_IN_MESSAGE`: total maximo de itens por mensagem. Padrao: `6`.
+- `QUIXADA_FEED_TEST_MODE`: quando `true`, envia uma mensagem de teste sem consultar o feed nem alterar o estado.
 
 Se o site estiver temporariamente fora do ar, responder com erro HTTP ou retornar
 uma pagina de manutencao no lugar do feed, a execucao termina normalmente e

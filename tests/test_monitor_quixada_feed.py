@@ -179,6 +179,41 @@ def test_split_message_respeita_limite_em_blocos():
     ]
 
 
+def test_modo_teste_envia_sem_consultar_feed_ou_alterar_estado(monkeypatch):
+    messages = []
+    session = object()
+    monkeypatch.setattr(monitor, "TEST_MODE", True)
+    monkeypatch.setattr(monitor, "build_http_session", lambda: session)
+    monkeypatch.setattr(
+        monitor,
+        "fetch_feed",
+        lambda current_session: pytest.fail("Feed nao deveria ser consultado."),
+    )
+    monkeypatch.setattr(
+        monitor,
+        "load_state",
+        lambda: pytest.fail("Estado nao deveria ser lido."),
+    )
+    monkeypatch.setattr(
+        monitor,
+        "save_state",
+        lambda feed: pytest.fail("Estado nao deveria ser alterado."),
+    )
+    monkeypatch.setattr(
+        monitor,
+        "send_telegram",
+        lambda message, current_session=None: messages.append(
+            (message, current_session)
+        )
+        or True,
+    )
+
+    assert monitor.main() == 0
+    assert messages == [(monitor.build_test_message(), session)]
+    assert "Teste do monitor do feed concluído" in messages[0][0]
+    assert "não indica nova publicação" in messages[0][0]
+
+
 @pytest.mark.parametrize(
     "error",
     [

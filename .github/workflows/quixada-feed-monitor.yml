@@ -2,6 +2,12 @@ name: quixada_feed_monitor
 
 on:
   workflow_dispatch:
+    inputs:
+      test_message:
+        description: Enviar mensagem de teste sem consultar o feed
+        required: false
+        default: false
+        type: boolean
 
   schedule:
     - cron: "13 * * * *"
@@ -47,6 +53,7 @@ jobs:
         id: monitor-feed
         env:
           QUIXADA_FEED_STATE_FILE: .cache/quixada_feed_state.json
+          QUIXADA_FEED_TEST_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.test_message }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_FEED_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_ID }}
         run: |
