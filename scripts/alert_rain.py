@@ -140,12 +140,16 @@ def consultar_chuva(session=None):
 
 
 def criar_mensagem_alerta(dados):
+    hora_atual, proxima_hora, hora_seguinte = (
+        horario.split("T", 1)[-1][:5] for horario in dados["horarios"][:3]
+    )
+
     return (
         "⚠️ Alerta de Chuva!\n"
         f"Probabilidade máxima nas próximas 2 horas: {dados['max_prob']}%.\n\n"
-        f"Agora: {dados['agora']}%\n"
-        f"Próxima hora: {dados['prox_1h']}%\n"
-        f"Daqui a 2 horas: {dados['prox_2h']}%\n\n"
+        f"{hora_atual}: {dados['agora']}%\n"
+        f"{proxima_hora}: {dados['prox_1h']}%\n"
+        f"{hora_seguinte}: {dados['prox_2h']}%\n\n"
         f"Local: {NOME_LOCAL}."
     )
 

@@ -14,7 +14,7 @@ Configure estes secrets no repositorio:
 
 ## Workflows
 
-- `rain_alerts`: roda dois jobs a cada 2 horas, no minuto 7: um para Varzea da Onca e outro para Quixada sede. A execucao manual permite enviar mensagens de teste.
+- `rain_alerts`: roda dois jobs a cada 3 horas, no minuto 7: um para Varzea da Onca e outro para Quixada sede. A execucao manual permite enviar mensagens de teste.
 - `quixada_feed_monitor`: roda a cada hora, no minuto 13.
 - `tests`: roda em push, pull request e manualmente.
 

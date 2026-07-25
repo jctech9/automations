@@ -53,7 +53,11 @@ def test_main_retorna_erro_quando_telegram_falha(monkeypatch):
             "prox_1h": 10,
             "prox_2h": 5,
             "max_prob": 80,
-            "horarios": [],
+            "horarios": [
+                "2026-07-11T15:00",
+                "2026-07-11T16:00",
+                "2026-07-11T17:00",
+            ],
         },
     )
     monkeypatch.setattr(alert, "enviar_telegram", lambda mensagem, session=None: False)
@@ -92,11 +96,19 @@ def test_mensagem_alerta_identifica_local(monkeypatch):
             "prox_1h": 60,
             "prox_2h": 40,
             "max_prob": 60,
+            "horarios": [
+                "2026-07-11T15:00",
+                "2026-07-11T16:00",
+                "2026-07-11T17:00",
+            ],
         }
     )
 
     assert "Local: Quixadá sede, CE." in mensagem
     assert "Probabilidade máxima nas próximas 2 horas: 60%." in mensagem
+    assert "15:00: 20%" in mensagem
+    assert "16:00: 60%" in mensagem
+    assert "17:00: 40%" in mensagem
 
 
 def test_modo_teste_envia_sem_consultar_previsao(monkeypatch):
