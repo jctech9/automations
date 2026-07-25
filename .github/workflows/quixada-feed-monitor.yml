@@ -47,8 +47,8 @@ jobs:
         id: monitor-feed
         env:
           QUIXADA_FEED_STATE_FILE: .cache/quixada_feed_state.json
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_FEED_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_ID }}
         run: |
           python scripts/monitor_quixada_feed.py
 

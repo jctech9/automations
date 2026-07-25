@@ -9,8 +9,9 @@ Automacoes em Python executadas pelo GitHub Actions para:
 
 Configure estes secrets no repositorio:
 
-- `TELEGRAM_BOT_TOKEN`: token do bot do Telegram.
-- `TELEGRAM_CHAT_ID`: chat, grupo ou canal que recebera as mensagens.
+- `TELEGRAM_RAIN_BOT_TOKEN`: token do bot dedicado aos alertas de chuva.
+- `TELEGRAM_FEED_BOT_TOKEN`: token do bot dedicado ao monitor do feed.
+- `TELEGRAM_ID`: chat, grupo ou canal que recebera as mensagens dos dois bots.
 
 ## Workflows
 

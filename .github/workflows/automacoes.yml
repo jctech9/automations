@@ -41,8 +41,8 @@ jobs:
 
       - name: Executar alerta de Várzea da Onça
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_RAIN_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_ID }}
           RAIN_ALERT_LOCATION_NAME: Várzea da Onça, Quixadá-CE
           RAIN_ALERT_LATITUDE: "-4.94094"
           RAIN_ALERT_LONGITUDE: "-38.85624"
@@ -71,8 +71,8 @@ jobs:
 
       - name: Executar alerta de Quixadá sede
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_RAIN_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_ID }}
           RAIN_ALERT_LOCATION_NAME: Quixadá sede, CE
           RAIN_ALERT_LATITUDE: "-4.96"
           RAIN_ALERT_LONGITUDE: "-39.01"
