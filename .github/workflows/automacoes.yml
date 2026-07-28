@@ -51,6 +51,36 @@ jobs:
         run: |
           python scripts/alert_rain.py
 
+  alerta-cipo-dos-anjos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Baixar código
+        uses: actions/checkout@v5
+
+      - name: Configurar Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Executar alerta de Cipó dos Anjos
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_RAIN_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_ID }}
+          RAIN_ALERT_LOCATION_NAME: Cipó dos Anjos, Quixadá-CE
+          RAIN_ALERT_LATITUDE: "-4.92825"
+          RAIN_ALERT_LONGITUDE: "-38.733472"
+          RAIN_ALERT_LOG_FILE: cipo-dos-anjos.log
+          RAIN_ALERT_TEST_MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.test_message }}
+        run: |
+          python scripts/alert_rain.py
+
   alerta-quixada-sede:
     runs-on: ubuntu-latest
     timeout-minutes: 5
